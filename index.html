@@ -916,55 +916,248 @@ createApp({
         shopItemForm.aiError = '';
       }catch(err){ shopItemForm.aiError = '照片讀取失敗，請換一張再試'; }
     }
-        async function fetchAiSuggestion(){
+            async function fetchAiSuggestion(){
       if(!shopItemForm.image && !shopItemForm.name){ shopItemForm.aiError = '請先輸入商品名稱，或上傳一張照片'; return; }
 
       // 1. 檢查是否已經有設定過 API Key
       let apiKey = localStorage.getItem('gemini_api_key');
       if (!apiKey) {
-        apiKey = prompt("首次使用 AI 功能，請輸入您的 Gemini API Key：\n\n（只需要輸入一次，金鑰會安全地儲存在您的手機瀏覽器中）");
-        if (!apiKey) {
+        let inputKey = prompt("首次使用 AI 功能，請輸入您的 Gemini API Key：\n\n（只需要輸入一次，金鑰會安全地儲存在您的手機瀏覽器中）");
+        if (!inputKey) {
           shopItemForm.aiError = '需要設定 API Key 才能呼叫 AI 幫忙查喔！';
           return;
         }
+        // 自動濾除手機複製時不小心沾到的空白鍵
+        apiKey = inputKey.trim();
         localStorage.setItem('gemini_api_key', apiKey);
       }
 
       shopItemForm.aiLoading = true; shopItemForm.aiError = ''; shopItemForm.aiSuggestion = '';
 
       try {
-        // 2. 準備給 Gemini 的提示詞與圖片
         const parts = [];
-        let promptText = `你是熟悉日本關西（大阪心齋橋、難波、京都）購物的在地顧問。根據使用者提供的商品照片和/或文字描述，用繁體中文簡短回答兩件事：1) 這可能是什麼商品、關鍵特徵或材質／用途；2) 在關西最可能買到的店家類型或具體店名（可參考 UNIQLO、GU、無印良品、PARCO、LOFT、東急手創館、唐吉訶德、藥妝店、3COINS、大創、graniph、mont-bell、workman 等）。全部控制在100字以內，寫成2-3句自然的話，不要條列、不要標題。\n\n商品名稱／描述：${shopItemForm.name || '（請參考圖片判斷）'}`;
+        let promptText = `你是熟悉日本關西（大阪心齋橋、難波、京都）購物的在地顧問。根據使用者提供的商品照片和/或文字描述，用繁體中文簡短回答兩件事：1) 這可能是什麼商品、關鍵特徵或材質／用途；2) 在關西最可能買到的店家類型或具體店名。全部控制在100字以內，寫成2-3句自然的話，不要條列、不要標題。\n\n商品名稱／描述：${shopItemForm.name || '（請參考圖片判斷）'}`;
         if(shopItemForm.note) promptText += `\n備註：${shopItemForm.note}`;
 
         parts.push({ text: promptText });
 
         if (shopItemForm.image) {
            parts.push({
-             inline_data: {
-               mime_type: "image/jpeg",
-               data: shopItemForm.image
-             }
+             inline_data: { mime_type: "image/jpeg", data: shopItemForm.image }
            });
         }
 
-        // 3. 呼叫 Gemini 1.5 Flash 模型
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: parts }]
-          })
+          body: JSON.stringify({ contents: [{ parts: parts }] })
         });
 
+        // 顯示真正的錯誤代碼，方便抓蟲
         if (!res.ok) {
+            const errData = await res.json().catch(()=>({}));
+            const apiMsg = errData?.error?.message || res.statusText || '未知錯誤';
             if (res.status === 400 || res.status === 403) {
-                localStorage.removeItem('gemini_api_key'); // 密碼錯誤就清掉重來
-                throw new Error("API Key 無效或已過期，請再次點擊按鈕重新輸入。");
+                localStorage.removeItem('gemini_api_key'); // 密碼錯誤自動清空
             }
-            throw new Error("與 AI 連線失敗，請檢查網路狀態。");
+            throw new Error(`連線失敗 (代碼 ${res.status}): ${apiMsg}`);
         }
+
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        shopItemForm.aiSuggestion = text || 'AI 沒有回傳建議，請稍後再試一次。';
+
+      } catch(err) {
+        shopItemForm.aiError = err.message || 'AI 查詢失敗，請檢查網路或 API Key。';
+      } finally {
+        shopItemForm.aiLoading = false;
+      }
+    }
+
+    // ---------- food list ----------
+    const foodList = reactive([]);
+    const foodForm = reactive({ show:false, editing:null, name:'', location:'', lat:null, lng:null, note:'' });
+    function openFoodForm(f){
+      if(f){ foodForm.editing=f; Object.assign(foodForm, { name:f.name, location:f.location, lat:f.lat, lng:f.lng, note:f.note }); }
+      else { foodForm.editing=null; Object.assign(foodForm, { name:'', location:'', lat:null, lng:null, note:'' }); }
+      foodForm.show = true;
+    }
+    function saveFood(){
+      if(!foodForm.name){ foodForm.show=false; return; }
+      const payload = { name:foodForm.name, location:foodForm.location, lat:foodForm.lat, lng:foodForm.lng, note:foodForm.note };
+      if(foodForm.editing){ Object.assign(foodForm.editing, payload); }
+      else { foodList.push({ id:Date.now(), visited:false, ...payload }); }
+      foodForm.show = false;
+    }
+
+    // ---------- notes ----------
+    const notesList = reactive([
+      { id:8001, title:'旅遊保險', content:'' },
+      { id:8002, title:'護照與證件影本', content:'' },
+      { id:8003, title:'駐大阪辦事處緊急聯絡（急難救助）', content:'【急難救助專線・24小時】日本境內直撥 090-8794-4568／海外漫遊 +81-90-8794-4568\n※僅限車禍、搶劫、生命危險等緊急事故，非緊急請勿撥打\n\n【辦公室一般事務（護照/簽證）】上班時間撥打 06-6227-8623（國際 +81-6-6227-8623）\n【上班時間】週一至週五 9:00-12:00、13:00-18:00，六日及日本國定假日休息\n【地址】大阪市北區中之島2-3-18 中之島Festival Tower 17F/19F（轄區含大阪／京都／兵庫／奈良／滋賀／和歌山）\n\n【聯絡不上辦事處時】外交部緊急聯絡中心（24小時）：從日本撥 +886-800-085-095（須付國際電話費）\n【日本當地報案／急救】警察 110／救護車・火災 119' },
+    ]);
+    const noteForm = reactive({ show:false, editing:null, title:'', content:'' });
+    function openNoteForm(n){
+      if(n){ noteForm.editing=n; noteForm.title=n.title; noteForm.content=n.content; }
+      else { noteForm.editing=null; noteForm.title=''; noteForm.content=''; }
+      noteForm.show = true;
+    }
+    function saveNote(){
+      if(!noteForm.title){ noteForm.show=false; return; }
+      if(noteForm.editing){ Object.assign(noteForm.editing, { title:noteForm.title, content:noteForm.content }); }
+      else { notesList.push({ id:Date.now(), title:noteForm.title, content:noteForm.content }); }
+      noteForm.show = false;
+    }
+
+    // ---------- Google Maps embed (no API key needed) ----------
+    const dayMapMode = ref('drive'); // 'drive' | 'walk'
+    const userLoc = ref(null);
+    const locationMsg = ref('');
+
+    const MAP_LANG = 'hl=zh-TW'; // force Traditional Chinese labels on the embedded Google Map (never Korean)
+    const dayMapUrl = computed(()=>{
+      const pts = currentDay.value.items.filter(i=>i.lat && i.lng).map(i=>`${i.lat},${i.lng}`);
+      if(pts.length===0) return null;
+      const flg = dayMapMode.value==='walk' ? '&dirflg=w' : '';
+      if(pts.length===1 && !userLoc.value){
+        return `https://www.google.com/maps?q=${pts[0]}&z=15&${MAP_LANG}&output=embed`;
+      }
+      const saddr = userLoc.value ? `${userLoc.value.lat},${userLoc.value.lng}` : pts[0];
+      const rest = userLoc.value ? pts : pts.slice(1);
+      if(rest.length===0){
+        return `https://www.google.com/maps?saddr=${saddr}&daddr=${pts[0]}${flg}&${MAP_LANG}&output=embed`;
+      }
+      return `https://www.google.com/maps?saddr=${saddr}&daddr=${rest.join('+to:')}${flg}&${MAP_LANG}&output=embed`;
+    });
+    const dayMapExternalUrl = computed(()=>{
+      const pts = currentDay.value.items.filter(i=>i.lat && i.lng).map(i=>`${i.lat},${i.lng}`);
+      if(pts.length===0) return null;
+      const mode = dayMapMode.value==='walk' ? 'walking' : 'driving';
+      const origin = userLoc.value ? `${userLoc.value.lat},${userLoc.value.lng}` : pts[0];
+      const rest = userLoc.value ? pts : pts.slice(1);
+      const destination = rest.length ? rest[rest.length-1] : pts[0];
+      const waypoints = rest.slice(0, -1).join('|');
+      let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=${mode}&${MAP_LANG}`;
+      if(waypoints) url += `&waypoints=${waypoints}`;
+      return url;
+    });
+    function locateMe(){
+      if(!navigator.geolocation){ locationMsg.value = '此瀏覽器不支援定位功能'; return; }
+      locationMsg.value = '定位中…';
+      navigator.geolocation.getCurrentPosition((pos)=>{
+        userLoc.value = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        locationMsg.value = '已定位！地圖已從目前位置規劃到今天各站的路線';
+        setTimeout(()=>{ locationMsg.value=''; }, 4000);
+      }, ()=>{ locationMsg.value = '無法取得目前位置，請確認已允許瀏覽器定位權限'; }, { enableHighAccuracy:true, timeout:8000 });
+    }
+    function openMap(item){
+      if(item.lat && item.lng){ window.open(`https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lng}`, '_blank'); }
+      else { window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.location || item.name)}`, '_blank'); }
+    }
+    function navigateTo(item){
+      const mode = (item.transport && item.transport.includes('步行')) ? 'walking' : 'transit';
+      if(item.lat && item.lng){ window.open(`https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}&travelmode=${mode}`, '_blank'); }
+      else { window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.location || item.name)}&travelmode=${mode}`, '_blank'); }
+    }
+
+    // ---------- shared persistent storage (syncs to everyone who opens this artifact's link) ----------
+    const syncState = reactive({ ready:false, error:false, lastSyncedAt:null });
+    async function loadJSON(key){
+      try{ const r = await window.storage.get(key, true); return r ? JSON.parse(r.value) : null; }
+      catch(e){ return null; }
+    }
+    async function saveJSON(key, val){
+      try{ await window.storage.set(key, JSON.stringify(val), true); }
+      catch(e){ console.error('storage save failed', key, e); }
+    }
+    const saveTimers = {};
+    function queueSave(key, getter){
+      clearTimeout(saveTimers[key]);
+      saveTimers[key] = setTimeout(()=> saveJSON(key, getter()), 500);
+    }
+    async function initStorage(){
+      try{
+        const savedDays = await loadJSON('kansai-days');
+        if(savedDays){ days.splice(0, days.length, ...savedDays); }
+        const savedBudget = await loadJSON('kansai-budget');
+        if(savedBudget){ budgetTotal.value = savedBudget.budgetTotal; creditLimit.value = savedBudget.creditLimit||0; flexExpenses.splice(0, flexExpenses.length, ...(savedBudget.flexExpenses||[])); }
+        const savedShopping = await loadJSON('kansai-shopping');
+        if(savedShopping){
+          storeWishlist.splice(0, storeWishlist.length, ...(savedShopping.storeWishlist||storeWishlist));
+          shoppingList.splice(0, shoppingList.length, ...(savedShopping.shoppingList||[]));
+        }
+        const savedFood = await loadJSON('kansai-food');
+        if(savedFood){ foodList.splice(0, foodList.length, ...savedFood); }
+        const savedNotes = await loadJSON('kansai-notes');
+        if(savedNotes){ notesList.splice(0, notesList.length, ...savedNotes); }
+      } catch(e){ syncState.error = true; }
+      finally{ syncState.ready = true; }
+    }
+    watch(days, ()=> queueSave('kansai-days', ()=> days), { deep:true });
+    watch(budgetTotal, ()=> queueSave('kansai-budget', ()=> ({ budgetTotal: budgetTotal.value, creditLimit: creditLimit.value, flexExpenses })));
+    watch(creditLimit, ()=> queueSave('kansai-budget', ()=> ({ budgetTotal: budgetTotal.value, creditLimit: creditLimit.value, flexExpenses })));
+    watch(flexExpenses, ()=> queueSave('kansai-budget', ()=> ({ budgetTotal: budgetTotal.value, creditLimit: creditLimit.value, flexExpenses })), { deep:true });
+    watch(storeWishlist, ()=> queueSave('kansai-shopping', ()=> ({ storeWishlist, shoppingList })), { deep:true });
+    watch(shoppingList, ()=> queueSave('kansai-shopping', ()=> ({ storeWishlist, shoppingList })), { deep:true });
+    watch(foodList, ()=> queueSave('kansai-food', ()=> foodList), { deep:true });
+    watch(notesList, ()=> queueSave('kansai-notes', ()=> notesList), { deep:true });
+
+    // ---------- near real-time sync: poll shared storage so a friend's edits show up automatically ----------
+    const anyModalOpen = computed(()=> itemForm.show || backupForm.show || expenseForm.show || storeForm.show || shopItemForm.show || foodForm.show || noteForm.show);
+    let pollTimer = null;
+    async function pollRemote(){
+      if(document.hidden || anyModalOpen.value) return; // don't clobber an edit in progress
+      try{
+        const [d, b, s, f, n] = await Promise.all([
+          loadJSON('kansai-days'), loadJSON('kansai-budget'), loadJSON('kansai-shopping'), loadJSON('kansai-food'), loadJSON('kansai-notes')
+        ]);
+        if(d && JSON.stringify(d)!==JSON.stringify(days)) days.splice(0, days.length, ...d);
+        if(b){
+          if(typeof b.budgetTotal==='number' && b.budgetTotal!==budgetTotal.value) budgetTotal.value = b.budgetTotal;
+          if((b.creditLimit||0)!==creditLimit.value) creditLimit.value = b.creditLimit||0;
+          if(JSON.stringify(b.flexExpenses||[])!==JSON.stringify(flexExpenses)) flexExpenses.splice(0, flexExpenses.length, ...(b.flexExpenses||[]));
+        }
+        if(s){
+          if(JSON.stringify(s.storeWishlist||[])!==JSON.stringify(storeWishlist)) storeWishlist.splice(0, storeWishlist.length, ...(s.storeWishlist||storeWishlist));
+          if(JSON.stringify(s.shoppingList||[])!==JSON.stringify(shoppingList)) shoppingList.splice(0, shoppingList.length, ...(s.shoppingList||[]));
+        }
+        if(f && JSON.stringify(f)!==JSON.stringify(foodList)) foodList.splice(0, foodList.length, ...f);
+        if(n && JSON.stringify(n)!==JSON.stringify(notesList)) notesList.splice(0, notesList.length, ...n);
+        syncState.error = false;
+        syncState.lastSyncedAt = Date.now();
+      }catch(e){ /* keep showing local data if a poll fails; try again next tick */ }
+    }
+
+    onMounted(async ()=>{
+      days.forEach(d=>{ fetchWeather(d); fetchAlert(d); });
+      convertQuick();
+      await initStorage();
+      syncState.lastSyncedAt = Date.now();
+      pollTimer = setInterval(pollRemote, 12000); // check for a friend's changes roughly every 12s
+      document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) pollRemote(); });
+    });
+    onUnmounted(()=>{ if(pollTimer) clearInterval(pollTimer); });
+
+    return {
+      tabs, activeTab, days, currentDayIndex, currentDay, selectDay,
+      currencies, converter, convertQuick, getRate, formatNum,
+      itemForm, openItemForm, saveItem, deleteItem,
+      backupForm, openBackupForm, saveBackup, deleteBackup,
+      expenseForm, openExpenseForm, saveExpense, deleteExpense, expensePreviewTWD,
+      daySubtotal, allExpenses, totalTWD, budgetTotal, creditLimit, combinedBudget, flexExpenses, remainingBudget, budgetPct,
+      storeWishlist, storeForm, openStoreForm, saveStore,
+      shoppingList, shopItemForm, openShopItemForm, saveShopItem, onShopImageChange, fetchAiSuggestion,
+      foodList, foodForm, openFoodForm, saveFood,
+      notesList, noteForm, openNoteForm, saveNote,
+      dayMapUrl, dayMapExternalUrl, dayMapMode, locateMe, locationMsg, navigateTo, openMap, fetchWeather,
+      syncState, pollRemote
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
+
 
         const data = await res.json();
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
