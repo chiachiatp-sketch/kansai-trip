@@ -913,36 +913,67 @@ createApp({
         shopItemForm.aiError = '';
       }catch(err){ shopItemForm.aiError = '照片讀取失敗，請換一張再試'; }
     }
-    async function fetchAiSuggestion(){
+        async function fetchAiSuggestion(){
       if(!shopItemForm.image && !shopItemForm.name){ shopItemForm.aiError = '請先輸入商品名稱，或上傳一張照片'; return; }
+
+      // 1. 檢查是否已經有設定過 API Key
+      let apiKey = localStorage.getItem('gemini_api_key');
+      if (!apiKey) {
+        apiKey = prompt("首次使用 AI 功能，請輸入您的 Gemini API Key：\n\n（只需要輸入一次，金鑰會安全地儲存在您的手機瀏覽器中）");
+        if (!apiKey) {
+          shopItemForm.aiError = '需要設定 API Key 才能呼叫 AI 幫忙查喔！';
+          return;
+        }
+        localStorage.setItem('gemini_api_key', apiKey);
+      }
+
       shopItemForm.aiLoading = true; shopItemForm.aiError = ''; shopItemForm.aiSuggestion = '';
-      try{
-        const content = [];
-        if(shopItemForm.image){ content.push({ type:'image', source:{ type:'base64', media_type:'image/jpeg', data: shopItemForm.image } }); }
-        let prompt = `商品名稱／描述：${shopItemForm.name || '（請參考圖片判斷）'}`;
-        if(shopItemForm.note) prompt += `\n備註：${shopItemForm.note}`;
-        content.push({ type:'text', text: prompt });
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
-          method:'POST',
-          headers:{ 'Content-Type':'application/json' },
+
+      try {
+        // 2. 準備給 Gemini 的提示詞與圖片
+        const parts = [];
+        let promptText = `你是熟悉日本關西（大阪心齋橋、難波、京都）購物的在地顧問。根據使用者提供的商品照片和/或文字描述，用繁體中文簡短回答兩件事：1) 這可能是什麼商品、關鍵特徵或材質／用途；2) 在關西最可能買到的店家類型或具體店名（可參考 UNIQLO、GU、無印良品、PARCO、LOFT、東急手創館、唐吉訶德、藥妝店、3COINS、大創、graniph、mont-bell、workman 等）。全部控制在100字以內，寫成2-3句自然的話，不要條列、不要標題。\n\n商品名稱／描述：${shopItemForm.name || '（請參考圖片判斷）'}`;
+        if(shopItemForm.note) promptText += `\n備註：${shopItemForm.note}`;
+
+        parts.push({ text: promptText });
+
+        if (shopItemForm.image) {
+           parts.push({
+             inline_data: {
+               mime_type: "image/jpeg",
+               data: shopItemForm.image
+             }
+           });
+        }
+
+        // 3. 呼叫 Gemini 1.5 Flash 模型
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model:'claude-sonnet-4-6',
-            max_tokens:1000,
-            system:'你是熟悉日本關西（大阪心齋橋、難波、京都）購物的在地顧問。根據使用者提供的商品照片和/或文字描述，用繁體中文簡短回答兩件事：1) 這可能是什麼商品、關鍵特徵或材質／用途；2) 在關西最可能買到的店家類型或具體店名（可參考 UNIQLO、GU、無印良品、PARCO、LOFT、東急手創館、唐吉訶德、藥妝店、3COINS、大創、graniph、mont-bell、workman 等）。全部控制在100字以內，寫成2-3句自然的話，不要條列、不要標題。',
-            messages:[ { role:'user', content } ]
+            contents: [{ parts: parts }]
           })
         });
+
+        if (!res.ok) {
+            if (res.status === 400 || res.status === 403) {
+                localStorage.removeItem('gemini_api_key'); // 密碼錯誤就清掉重來
+                throw new Error("API Key 無效或已過期，請再次點擊按鈕重新輸入。");
+            }
+            throw new Error("與 AI 連線失敗，請檢查網路狀態。");
+        }
+
         const data = await res.json();
-        const text = (data.content||[]).map(b=> b.text || '').filter(Boolean).join('\n').trim();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
         shopItemForm.aiSuggestion = text || 'AI 沒有回傳建議，請稍後再試一次。';
-      }catch(err){
-        shopItemForm.aiError = 'AI 建議暫時無法取得（此功能需在已發布的 Claude 連結中使用），可以先手動填寫建議店家。';
-      }finally{
+
+      } catch(err) {
+        shopItemForm.aiError = err.message || 'AI 查詢失敗，請檢查網路或 API Key。';
+      } finally {
         shopItemForm.aiLoading = false;
       }
     }
 
-    // ---------- food list ----------
     const foodList = reactive([]);
     const foodForm = reactive({ show:false, editing:null, name:'', location:'', lat:null, lng:null, note:'' });
     function openFoodForm(f){
