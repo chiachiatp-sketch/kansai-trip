@@ -315,9 +315,12 @@
       </div>
     </section>
 
-    <!-- ---------- SHOPPING ---------- -->
-    <section v-else-if="activeTab==='shopping'" key="shopping">
-      <h2 class="font-display font-700 text-lg mb-1">待去店家清單</h2>
+    <!-- ---------- STORE (店家) ---------- -->
+    <section v-else-if="activeTab==='store'" key="store">
+      <div class="flex items-center justify-between mb-2 px-1">
+        <h2 class="font-display font-700 text-lg">待去店家清單</h2>
+        <button @click="openStoreForm()" class="press text-xs bg-[var(--coral)] text-white px-3 py-1.5 rounded-full sticker-sm font-bold">＋ 新增店家</button>
+      </div>
       <p class="text-xs text-[var(--ink-soft)] mb-3 leading-relaxed">已依行程動線標註建議安排的天數；心齋橋周邊店家都在飯店步行圈內，不需額外交通費。</p>
       <div class="space-y-2 mb-6">
         <div v-for="s in storeWishlist" :key="s.id" class="bg-white rounded-2xl p-3.5 sticker-sm border-[var(--ink)]" :class="s.visited?'opacity-60':''">
@@ -341,37 +344,36 @@
           </div>
         </div>
       </div>
-      <button @click="openStoreForm()" class="press w-full text-sm bg-[var(--coral)] text-white py-2.5 rounded-full sticker-sm font-bold mb-8">＋ 新增待去店家</button>
+    </section>
 
-      <div class="dashed-divider pt-5">
-        <div class="flex items-center justify-between mb-2 px-1">
-          <h2 class="font-display font-700 text-lg">我的購物清單</h2>
-          <button @click="openShopItemForm()" class="press text-xs bg-[var(--grass)] text-white px-3 py-1.5 rounded-full sticker-sm font-bold">＋ 新增項目</button>
-        </div>
-        <div class="space-y-2">
-          <div v-for="it in shoppingList" :key="it.id" class="bg-white rounded-xl p-3 sticker-sm border-[var(--ink)]">
-            <div class="flex items-start gap-2">
-              <button @click="it.bought=!it.bought" class="text-lg leading-none">{{ it.bought ? '✅' : '⬜' }}</button>
-              <img v-if="it.imagePreview" :src="it.imagePreview" class="w-12 h-12 object-cover rounded-lg border-2 border-[var(--ink)] shrink-0" />
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-bold" :class="it.bought?'strike':''">{{ it.name }}</p>
-                <p v-if="it.store" class="text-xs text-[var(--ink-soft)]">建議店家：{{ it.store }}</p>
-                <p v-if="it.note" class="text-xs text-[var(--ink-soft)] mt-1">{{ it.note }}</p>
-                <p v-if="it.aiSuggestion" class="text-xs text-[var(--teal-dark)] bg-[var(--teal-light)] rounded-lg px-2 py-1.5 mt-1 leading-relaxed border border-[var(--teal)]">🤖 {{ it.aiSuggestion }}</p>
-                <div class="flex gap-2 mt-1.5 flex-wrap">
-                  <button @click="openMap(it)" class="press text-[11px] font-medium text-white bg-[var(--teal)] px-2.5 py-1 rounded-full sticker-sm">🗺️ 地圖</button>
-                  <button @click="navigateTo(it)" class="press text-[11px] font-medium text-white bg-[var(--coral)] px-2.5 py-1 rounded-full sticker-sm">🧭 導航</button>
-                  <button @click="openShopItemForm(it)" class="text-[11px] text-[var(--teal-dark)]">編輯</button>
-                  <button @click="shoppingList=shoppingList.filter(x=>x.id!==it.id)" class="text-[11px] text-[var(--berry)]">刪除</button>
-                </div>
+    <!-- ---------- SHOPPING (購物清單) ---------- -->
+    <section v-else-if="activeTab==='shopping'" key="shopping">
+      <div class="flex items-center justify-between mb-2 px-1">
+        <h2 class="font-display font-700 text-lg">我的購物清單</h2>
+        <button @click="openShopItemForm()" class="press text-xs bg-[var(--grass)] text-white px-3 py-1.5 rounded-full sticker-sm font-bold">＋ 新增項目</button>
+      </div>
+      <div class="space-y-2">
+        <div v-for="it in shoppingList" :key="it.id" class="bg-white rounded-xl p-3 sticker-sm border-[var(--ink)]">
+          <div class="flex items-start gap-2">
+            <button @click="it.bought=!it.bought" class="text-lg leading-none">{{ it.bought ? '✅' : '⬜' }}</button>
+            <img v-if="it.imagePreview" :src="it.imagePreview" class="w-12 h-12 object-cover rounded-lg border-2 border-[var(--ink)] shrink-0" />
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-bold" :class="it.bought?'strike':''">{{ it.name }}</p>
+              <p v-if="it.store" class="text-xs text-[var(--ink-soft)]">建議店家：{{ it.store }}</p>
+              <p v-if="it.note" class="text-xs text-[var(--ink-soft)] mt-1">{{ it.note }}</p>
+              <p v-if="it.aiSuggestion" class="text-xs text-[var(--teal-dark)] bg-[var(--teal-light)] rounded-lg px-2 py-1.5 mt-1 leading-relaxed border border-[var(--teal)]">🤖 {{ it.aiSuggestion }}</p>
+              <div class="flex gap-2 mt-1.5 flex-wrap">
+                <button @click="openMap(it)" class="press text-[11px] font-medium text-white bg-[var(--teal)] px-2.5 py-1 rounded-full sticker-sm">🗺️ 地圖</button>
+                <button @click="navigateTo(it)" class="press text-[11px] font-medium text-white bg-[var(--coral)] px-2.5 py-1 rounded-full sticker-sm">🧭 導航</button>
+                <button @click="openShopItemForm(it)" class="text-[11px] text-[var(--teal-dark)]">編輯</button>
+                <button @click="shoppingList=shoppingList.filter(x=>x.id!==it.id)" class="text-[11px] text-[var(--berry)]">刪除</button>
               </div>
             </div>
           </div>
-          <p v-if="shoppingList.length===0" class="text-xs text-[var(--ink-soft)] pl-1">尚無購物項目</p>
         </div>
+        <p v-if="shoppingList.length===0" class="text-xs text-[var(--ink-soft)] pl-1">尚無購物項目</p>
       </div>
     </section>
-
     <!-- ---------- FOOD ---------- -->
     <section v-else-if="activeTab==='food'" key="food">
       <div class="flex items-center justify-between mb-2 px-1">
