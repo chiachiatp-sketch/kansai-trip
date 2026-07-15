@@ -916,7 +916,7 @@ createApp({
         shopItemForm.aiError = '';
       }catch(err){ shopItemForm.aiError = '照片讀取失敗，請換一張再試'; }
     }
-            async function fetchAiSuggestion(){
+                async function fetchAiSuggestion(){
       if(!shopItemForm.image && !shopItemForm.name){ shopItemForm.aiError = '請先輸入商品名稱，或上傳一張照片'; return; }
 
       // 1. 檢查是否已經有設定過 API Key
@@ -936,7 +936,8 @@ createApp({
 
       try {
         const parts = [];
-        let promptText = `你是熟悉日本關西（大阪心齋橋、難波、京都）購物的在地顧問。根據使用者提供的商品照片和/或文字描述，用繁體中文簡短回答兩件事：1) 這可能是什麼商品、關鍵特徵或材質／用途；2) 在關西最可能買到的店家類型或具體店名。全部控制在100字以內，寫成2-3句自然的話，不要條列、不要標題。\n\n商品名稱／描述：${shopItemForm.name || '（請參考圖片判斷）'}`;
+        // 稍微調整提示詞，強調要用 Google 搜尋最新網頁資訊
+        let promptText = `你是熟悉日本關西購物的在地顧問。請根據使用者提供的商品照片和/或文字描述，務必使用 Google 搜尋最新網頁資訊，用繁體中文簡短回答兩件事：1) 這項商品的特色、用途或最新評價；2) 在關西最可能買到的具體實體店面。全部控制在100字以內，寫成2-3句自然的話，不要條列、不要標題。\n\n商品名稱／描述：${shopItemForm.name || '（請參考圖片判斷）'}`;
         if(shopItemForm.note) promptText += `\n備註：${shopItemForm.note}`;
 
         parts.push({ text: promptText });
@@ -950,7 +951,10 @@ createApp({
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: parts }] })
+          body: JSON.stringify({ 
+            contents: [{ parts: parts }],
+            tools: [{ googleSearch: {} }] // 🌟 啟動 Google 即時搜尋功能！
+          })
         });
 
         // 顯示真正的錯誤代碼，方便抓蟲
