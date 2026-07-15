@@ -916,7 +916,7 @@ createApp({
         shopItemForm.aiError = '';
       }catch(err){ shopItemForm.aiError = '照片讀取失敗，請換一張再試'; }
     }
-                async function fetchAiSuggestion(){
+                    async function fetchAiSuggestion(){
       if(!shopItemForm.image && !shopItemForm.name){ shopItemForm.aiError = '請先輸入商品名稱，或上傳一張照片'; return; }
 
       // 1. 檢查是否已經有設定過 API Key
