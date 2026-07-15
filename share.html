@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>關西旅行・雲端同步共享版</title>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.4.21/vue.global.prod.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background-color: #FFFBF0; font-family: sans-serif; }
+</style>
+</head>
+<body>
+<div id="app" class="p-5">
+  <h1 class="text-2xl font-bold mb-4">🗓️ 關西行程共享頁面</h1>
+  <p class="mb-4 text-sm text-gray-600">所有知道此連結的人，更新行程都會同步。</p>
+  
+  <div v-for="(day, index) in days" :key="day.id" class="mb-6 border-b pb-4">
+    <h2 class="font-bold text-lg">DAY {{ day.id }}</h2>
+    <div v-for="item in day.items" :key="item.id" class="bg-white p-3 rounded shadow-sm my-2">
+      <p class="font-bold">{{ item.title }}</p>
+      <p class="text-sm text-gray-500">{{ item.time }} - {{ item.location }}</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyD1EKLF7iWF_1zrOqh5kzdr43q7P0pljrk",
+  authDomain: "kansai-trip-app.firebaseapp.com",
+  databaseURL: "https://kansai-trip-app-default-rtdb.firebaseio.com",
+  projectId: "kansai-trip-app",
+  storageBucket: "kansai-trip-app.firebasestorage.app",
+  messagingSenderId: "542960777424",
+  appId: "1:542960777424:web:779794f5deb3e2b4c646d5"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+const { createApp, reactive, onMounted } = Vue;
+createApp({
+  setup(){
+    const days = reactive([{ id: 1, items: [{id:1, time:'10:00', title:'等待載入中...', location:'雲端同步中'}] }]);
+    
+    onMounted(() => {
+      db.ref('days').on('value', (snapshot) => {
+        const data = snapshot.val();
+        if(data) days.splice(0, days.length, ...data);
+      });
+    });
+
+    return { days };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
+
