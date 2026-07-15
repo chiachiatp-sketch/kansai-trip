@@ -1014,12 +1014,17 @@ createApp({
 
     // ---------- shared persistent storage (syncs to everyone who opens this artifact's link) ----------
     const syncState = reactive({ ready:false, error:false, lastSyncedAt:null });
-    async function loadJSON(key){
-      try{ const r = await window.storage.get(key, true); return r ? JSON.parse(r.value) : null; }
+        async function loadJSON(key){
+      try{ 
+        const r = localStorage.getItem(key); 
+        return r ? JSON.parse(r) : null; 
+      }
       catch(e){ return null; }
     }
     async function saveJSON(key, val){
-      try{ await window.storage.set(key, JSON.stringify(val), true); }
+      try{ 
+        localStorage.setItem(key, JSON.stringify(val)); 
+      }
       catch(e){ console.error('storage save failed', key, e); }
     }
     const saveTimers = {};
