@@ -1182,6 +1182,9 @@ createApp({
 
     // ---------- shared persistent storage (syncs to everyone who opens this artifact's link) ----------
     const syncState = reactive({ ready:false, error:false, lastSyncedAt:null });
+    const lastLocalEditAt = { days:0, budget:0, shopping:0, food:0, notes:0, packing:0 };
+    function markEdited(key){ lastLocalEditAt[key] = Date.now(); }
+    function recentlyEdited(key, graceMs=2500){ return (Date.now() - lastLocalEditAt[key]) < graceMs; }
     const useFirebase = !!(FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.databaseURL);
     let fbRef = null;
     if(useFirebase){
